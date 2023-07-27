@@ -326,6 +326,7 @@ def MUDBENCS_map(data_df, variable, colormap='plasma'):
     m.drawmeridians(np.arange(-180., 181., 5.), labels=[True,False,False,True])
     x, y = m(data_df['Lon Dec. Deg.'], data_df['Lat Dec. Deg.'])
     m.scatter(x, y, c=data_df[variable], s=25, cmap=colormap)
-    plt.colorbar(label=variable.strip())
+    plt.colorbar( label=variable.strip())
+   
 
     return m
