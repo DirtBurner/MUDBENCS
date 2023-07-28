@@ -144,19 +144,22 @@ def plot_profile(dat_nc, variable, direction='down'):
     _, ax = plt.subplots(nrows=1, ncols=cols)
 
     for z, axis in enumerate(ax.flatten()):
-        profile_plotter(down_df, up_df, v[z], direction, axis)
-        debug('v[z].title is ', v[z].title())
-        plt.xlabel(v[z].title())
-        axis.invert_yaxis()
-        if z == 0:
-            debug('Labeling y-axis with', z, v[z])
-            plt.ylabel('Depth')
+        profile_plotter(down_df, up_df, v[z], direction, axis, z)
+        #Label y-axis only of the first subplot (ax[0])
+        #if z == 0:
+        #    debug('Labeling y-axis of axes', z, 'as Depth')
+        #    plt.ylabel('Depth')
+        #sub_ax.set_xlabel(v[z].title())
+        #debug('Labeling x-axis of subplot', z, 'as', v[z].title())
+        #sub_ax.ticklabel_format(axis='x', style='plain')
+        #sub_ax.invert_yaxis()
+        
     
 
     return down_df, up_df, bounce_point, ax
 
 
-def profile_plotter(down_df, up_df, v, direction, ax):
+def profile_plotter(down_df, up_df, v, direction, ax, z):
     #Select downcast, upcast, or both dependent on keyword arguments.
     if direction == 'down':
         ax.plot(down_df[v], down_df['DEPTH'], 'b')
@@ -169,6 +172,18 @@ def profile_plotter(down_df, up_df, v, direction, ax):
         print(direction, ' is not a valid choice. Choose up, down, or both. Plotting both casts.')
         ax.plot(down_df[v], down_df['DEPTH'], 'b')
         ax.plot(up_df[v], up_df['DEPTH'], 'lightblue')
+    condition_axes(ax, v, z)
+    debug('Function "profile_plotter has called "condition_axes" to label x-axis of subplot', z, 'as', v.title())
+
+def condition_axes(ax, v, z):
+    #Label axes for profile plotter, depending on the number (z) of the ax that is passed to it and the
+    #variable name.
+    if z == 0:
+        debug('Function "condition_axes" is labeling the y-axis "Depth"')
+        ax.set_ylabel('Depth (m)')
+    ax.set_xlabel(v.title())
+    ax.invert_yaxis()
+    ax.ticklabel_format(axis='x', style='plain')
 
 def variable_checker(variable, dat_nc):
     # Check keyword arguments
