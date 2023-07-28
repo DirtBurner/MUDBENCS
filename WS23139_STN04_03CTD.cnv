@@ -295,7 +295,7 @@
 #     </SPAR_Sensor>
 #   </sensor>
 # </Sensors>
-# datcnv_date = Jul 27 2023 13:29:11, 7.26.7.129 [datcnv_vars = 11]
+# datcnv_date = Jul 27 2023 16:08:39, 7.26.7.129 [datcnv_vars = 11]
 # datcnv_in = C:\Users\beros\Box\UDrive_brosenheim\My_Documents\Research\Seagoing Expeditions\CHEM-OCE Guianas Mudbanks 2020\Expedition prep\MUDBENCS\CTD_Data\WS23139_Rosenheim_CTD\WS23139_Rosenheim_STN04.hex C:\Users\beros\Box\UDrive_brosenheim\My_Documents\Research\Seagoing Expeditions\CHEM-OCE Guianas Mudbanks 2020\Expedition prep\MUDBENCS\CTD_Data\WS23139_Rosenheim_CTD\WS23139_Rosenheim_STN04.XMLCON
 # datcnv_skipover = 0
 # datcnv_ox_hysteresis_correction = yes
