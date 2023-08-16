@@ -144,7 +144,7 @@ def plot_profile(dat_nc, variable, direction='down'):
     _, ax = plt.subplots(nrows=1, ncols=cols)
 
     for z, axis in enumerate(ax.flatten()):
-        profile_plotter(down_df, up_df, v[z], direction, axis, z)
+        profile_plotter(down_df, up_df, v[z], axis, z,  direction,)
         #Label y-axis only of the first subplot (ax[0])
         #if z == 0:
         #    debug('Labeling y-axis of axes', z, 'as Depth')
@@ -159,19 +159,24 @@ def plot_profile(dat_nc, variable, direction='down'):
     return down_df, up_df, bounce_point, ax
 
 
-def profile_plotter(down_df, up_df, v, direction, ax, z):
+def profile_plotter(down_df, up_df, v, ax, z, direction='both'):
     #Select downcast, upcast, or both dependent on keyword arguments.
+    debug('Direction has been entered as ', direction)
     if direction == 'down':
         ax.plot(down_df[v], down_df['DEPTH'], 'b')
+        debug('Plotting downcast...')
     if direction == 'up':
         ax.plot(up_df[v], up_df['DEPTH'], 'lightblue')
+        debug('Plotting upcast...')
     if direction == 'both':
         ax.plot(down_df[v], down_df['DEPTH'], 'b')
         ax.plot(up_df[v], up_df['DEPTH'], 'lightblue')
+        debug('Plotting both up and down casts...')
     if direction not in ['up', 'down', 'both']:
         print(direction, ' is not a valid choice. Choose up, down, or both. Plotting both casts.')
         ax.plot(down_df[v], down_df['DEPTH'], 'b')
         ax.plot(up_df[v], up_df['DEPTH'], 'lightblue')
+        debug('Unrecognized kwarg for direction; plotting both up and down casts...')
     condition_axes(ax, v, z)
     debug('Function "profile_plotter has called "condition_axes" to label x-axis of subplot', z, 'as', v.title())
 
@@ -181,6 +186,10 @@ def condition_axes(ax, v, z):
     if z == 0:
         debug('Function "condition_axes" is labeling the y-axis "Depth"')
         ax.set_ylabel('Depth (m)')
+        ax.grid('True', axis='y')
+    else:
+        ax.grid('True', axis='y')
+        ax.set_yticklabels([])
     ax.set_xlabel(v.title())
     ax.invert_yaxis()
     ax.ticklabel_format(axis='x', style='plain')
