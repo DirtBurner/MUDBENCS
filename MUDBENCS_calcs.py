@@ -9,6 +9,27 @@ import geopandas as gpd
 print('(((((((((((((((( MUDBENCS Date Analysis and Visualization Tools ))))))))))))))))')
 
 DEBUG = False
+OTS_stations = [
+    'stn02',
+    'stn04',
+    'stn05',
+    'stn06',
+    'stn07',
+    'stn08',
+    'stn09',
+    'stn10',
+    'stn11',
+    'stn12',
+    'stn13',
+    'stn14',
+    'stn15',
+    'stn16',
+    'stn17',
+    'stn18',
+    'stn19',
+    'stn20',
+    'stn21'
+]
 
 def debug(*args):
     if DEBUG == True:
@@ -314,7 +335,7 @@ def mask_expedition_legs(data_df, begin_end):
 
     return leg_data_df
 
-def MUDBENCS_map(data_df, variable, colormap='plasma'):
+def MUDBENCS_map(data_df, variable, colormap='plasma', label_countries=True, add_stations=True, stationslist=OTS_stations, add_front=False):
     '''
     This function creates a Lambert Conformal projection with continents, shaded relief, and 
     outlines of countries. The function plots the points recorded by the ship underway data system 
@@ -329,6 +350,19 @@ def MUDBENCS_map(data_df, variable, colormap='plasma'):
                 print(data_df.columns). 
             Keyword Arguments In
             color_map (string, default color_map='plasma') - color map for the plotted points
+            label_countries (boolean, default=True) - Add text labels to countries in the fixed map
+            add_stations (Boolean, default=True) - Add points for coordinates of stations in stationslist
+                The variable stationslist is hard wired in this .py file (scroll to top) to include all
+                stations with over-the-side deployents and to ignore stations where observations (only)
+                and/or through-water samples were taken. Any substitute list can be added, but the entries
+                in the list have to match the "Station Number" values in MUDBENCS_Stations.csv or else 
+                they simply will not be plotted.
+            stationslist (list of strings, default=stationslist) - list of strings that correspond
+                to station numbers (format: stnXX where XX is a two-digit station identifier with
+                the exception of stn6_TurbEdge which was an observation site with no over-the-side
+                deployments). If this list is manually input into the function call, and if any 
+                strings are not in the column for station list, it will simply ignore those stations.
+            add_front (Boolean, default=False) - add observed frontal boundary as an open square
         Outputs:
             m (map axes) - the map axes, for adding more annotation or points to the map
 
@@ -351,6 +385,60 @@ def MUDBENCS_map(data_df, variable, colormap='plasma'):
     x, y = m(data_df['Lon Dec. Deg.'], data_df['Lat Dec. Deg.'])
     m.scatter(x, y, c=data_df[variable], s=25, cmap=colormap)
     plt.colorbar( label=variable.strip())
-   
+    #Add optional map features called in kwargs:
+    if label_countries == True:
+        add_country_names(m)
+    if add_stations == True:
+        add_stations_list(m, stationslist)
+    if add_front == True:
+        add_front_site(m)
+ 
 
     return m
+
+def add_country_names(m):
+    '''
+    This function is used conditionally (set by kwargs in calling function) in mapping functions to 
+    add the country names manually into maps which show data from the cruise. The coordinates of
+    the country names are based on the fixed coordinates within the function MUDBENCS_map as of 
+    4 October 2023.
+
+
+    '''
+
+    lon = (-53, -53, -54.53)
+    lat = (4.1, 0.5, 3.55)
+    names = ['French Guiana', 'Brazil', 'Surin.']
+    X,Y = m(lon,lat)
+    for i, (X, Y) in enumerate(zip(X, Y), start=0):
+        plt.text(X, Y, names[i], ha='center', color='k')
+
+def add_stations_list(m, stationslist):
+    '''
+    Function called conditionally by MUDBENCS_map when a user enters keyword argument `add_stations=True`. 
+    If the keyword argument stationslist=[] is used to enter a list of station names, only those stations
+    will be plotted. If not, all stations in the hard-wired variable stationslist are included. These
+    hardwired stations are the actual stations with over-the-side deployments, not frontal observation
+    stations which were also numbered in station logs aboard the ship. Coordinates are stored in the 
+    MUDBENCS_Stations.csv file in the repository.
+    '''
+
+    #Add all stations for which we have CTD data (all stations which do not contain the word "Test" in their names):
+    stations = pd.read_csv('MUDBENCS_Stations.csv')
+    #Plot only the stations that are in the stations list, passed from calling function or defaulting to var
+    #defined in this .py file. 
+    sample_stations = stations[stations['Station Number'].isin(stationslist)]
+    debug(sample_stations['Station Number'])    
+    #Add to plot:
+    m.plot(sample_stations['Lon'], sample_stations['Lat'], latlon=True, marker='.', markersize=8, color='k', mec='white', linestyle='')
+
+def add_front_site(m):
+    '''
+    Adds an observed front that was recorded in the station logs to the plot. The front was sharp enough
+    to be picked up on radar in the bridge, so it is plotted as a square, open to avoid blocking the
+    data underneath.
+    '''
+
+    front_lat = 2+20.3687/60
+    front_lon = -(48+31.416/60)
+    m.plot(front_lon, front_lat, latlon=True, marker='s', markersize=10, color='None', markeredgecolor='k')
