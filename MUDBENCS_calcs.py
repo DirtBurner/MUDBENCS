@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from seabird.cnv import fCNV
 from mpl_toolkits.basemap import Basemap
 import geopandas as gpd
+import glob
 
 print('(((((((((((((((( MUDBENCS Date Analysis and Visualization Tools ))))))))))))))))')
 
@@ -126,12 +127,7 @@ def separate_up_down(dat_nc, bounce_point):
     create two dataframes.
     '''
 
-    cols = dat_nc.keys()
-    dat_dict = {}
-    for column in cols:
-        dat_dict |= {column:dat_nc[column]}
-
-    dat_df = pd.DataFrame(dat_dict)
+    dat_df = cnv2df(dat_nc)
 
     dat_df_down, dat_df_up = dat_df.loc[dat_df.index<bounce_point], dat_df.loc[dat_df.index>bounce_point]
 
@@ -160,21 +156,11 @@ def plot_profile(dat_nc, variable, direction='down'):
         v.append(temp)
         debug('Building out the variables from variable. Adding:', v)
 
-    cols = len(v)
-
-    _, ax = plt.subplots(nrows=1, ncols=cols)
+    #Creat axes for each variable in the profile.
+    _, ax = plt.subplots(nrows=1, ncols=len(v))
 
     for z, axis in enumerate(ax.flatten()):
-        profile_plotter(down_df, up_df, v[z], axis, z,  direction,)
-        #Label y-axis only of the first subplot (ax[0])
-        #if z == 0:
-        #    debug('Labeling y-axis of axes', z, 'as Depth')
-        #    plt.ylabel('Depth')
-        #sub_ax.set_xlabel(v[z].title())
-        #debug('Labeling x-axis of subplot', z, 'as', v[z].title())
-        #sub_ax.ticklabel_format(axis='x', style='plain')
-        #sub_ax.invert_yaxis()
-        
+        profile_plotter(down_df, up_df, v[z], axis, z,  direction,)     
     
 
     return down_df, up_df, bounce_point, ax
@@ -442,3 +428,105 @@ def add_front_site(m):
     front_lat = 2+20.3687/60
     front_lon = -(48+31.416/60)
     m.plot(front_lon, front_lat, latlon=True, marker='s', markersize=10, color='None', markeredgecolor='k')
+
+def plot_one_to_one_line(ax):
+    '''
+    This simply adds a one to one line on a plot in black based on the axis limits of the ax handle passed 
+    through. No outputs. 
+    '''
+
+    xes = ax.get_xlim()
+    x = np.linspace(min(xes), max(xes), 10)
+    y = x
+    ax.plot(x, y, color='k')
+
+def cnv2df(cnv_obj):
+    '''
+    Convert cnv files processed from Seabird hex files first into dictionary, then into a dataframe
+    '''
+    nc_dict = {}
+    for key in cnv_obj.keys():
+        debug(key, cnv_obj[key][0:5])
+        debug(type(cnv_obj[key]))
+        nc_dict |= {key:cnv_obj[key]}
+
+    dat_df = pd.DataFrame(nc_dict)
+
+    return dat_df
+
+def bottle_depth_variables(bottle_file, down_df, up_df):
+    bottle_depths = pd.read_csv(bottle_file, skiprows=2, header=None)
+    
+    debug('Shape of upcast dataframe: ', up_df.shape)
+    debug('Upcast dataframe index range: ', up_df.index[0], ' to ', up_df.index[-1])
+
+    bot_avgs = pd.DataFrame()
+    bot_stds = pd.DataFrame()
+
+    for ind, bot in bottle_depths.iterrows():
+        bot_num = bot[0]
+        debug('Bottle number: ', bot_num)
+        depth_range = [float(up_df['DEPTH'][up_df.index == bot[3]].values), float(up_df['DEPTH'][up_df.index == bot[4]].values)]
+        debug('Depth range: ', depth_range)
+        bottle_depth_downcast_df = down_df.loc[(down_df['DEPTH'] <=  max(depth_range)) & (down_df['DEPTH'] >=  min(depth_range))]
+        bottle_depth_averages, bottle_depth_stds = bottle_depth_downcast_df.mean(), bottle_depth_downcast_df.std()
+        flag = 'Actual Values'
+        #Check for NaNs, which are due to not enough distance between the beginning and end of a bottle firing. If
+        #NaNs present, add distance in depth range:
+        if bottle_depth_averages.isna().any():
+            print('Nans present in bottle ', bot_num, '. Stretching depth range by 3%.')
+            depth_range = [0.97*min(depth_range), 1.03*max(depth_range)]
+            bottle_depth_downcast_df = down_df.loc[(down_df['DEPTH'] <=  max(depth_range)) & (down_df['DEPTH'] >=  min(depth_range))]
+            bottle_depth_averages, bottle_depth_stds = bottle_depth_downcast_df.mean(), bottle_depth_downcast_df.std()
+            flag = 'Stretched Depth Range (3%)'
+        #Do it a second time if 3% is not enough, but add a fixed distance to the range
+        if bottle_depth_averages.isna().any():
+            print('Nans still present in bottle ', bot_num, '. Using upcast data instead.')
+            bottle_depth_downcast_df = up_df.loc[(up_df['DEPTH'] <=  max(depth_range)) & (up_df['DEPTH'] >=  min(depth_range))]
+            bottle_depth_averages, bottle_depth_stds = bottle_depth_downcast_df.mean(), bottle_depth_downcast_df.std()
+            flag = 'Used upcast data due to depth differences from downcast data.'
+        
+        #Add bottle numbers to each series and compile a dataframe with the series:
+        bottle_depth_averages['Bottle Number'] = bot_num
+        bottle_depth_stds['Bottle Number'] = bot_num
+        bottle_depth_averages['Depth avg flag'] = flag
+        bottle_depth_stds['Depth avg flag'] = flag
+        bot_avgs = bot_avgs.append(bottle_depth_averages, ignore_index=True)
+        bot_stds = bot_stds.append(bottle_depth_stds, ignore_index=True)
+        
+        debug('Loop ', ind, bottle_depth_averages, bottle_depth_stds)
+        debug('\n', '\n')
+
+    return bot_avgs, bot_stds
+
+
+def load_CTD_data(CTD_num, variables = ['density', 'TEMP', 'PSAL'], plot_data=True, direction='both'):
+    file_name, bottle_file = find_files(CTD_num)
+    dat_nc = get_CNV_data(file_name)
+    
+    #Print attributes such as latitude and longitude, as well as time measured. Uses the output file from above. 
+    print('The profile coordinates are latitude: %.4f, and longitude: %.4f, collected at ' % (dat_nc.attributes['LATITUDE'], dat_nc.attributes['LONGITUDE']), dat_nc.attributes['gps_datetime'])
+    print('Data types available are: ', dat_nc.keys())
+
+    #Get up and down cast data and plot the chose variables
+    down_df, up_df = separate_up_down(dat_nc, find_bottom(dat_nc))
+    
+    #Get bottle averages
+    bot_avgs, bot_stds = bottle_depth_variables(bottle_file, down_df, up_df)
+
+    #Plot if desired
+    if plot_data == True:
+        _, _, _, ax = plot_profile(dat_nc, variables, direction='down')
+    elif plot_data == False:
+        ax = None
+
+    return down_df, up_df, bot_avgs, bot_stds, ax
+
+
+def find_files(CTD_num):
+    for file in glob.glob('*'+CTD_num+'*.cnv'):
+        file_name = file
+    for bl_file in glob.glob('*'+CTD_num+'*.bl'):
+        bot_file_name = bl_file
+
+    return file_name, bot_file_name
