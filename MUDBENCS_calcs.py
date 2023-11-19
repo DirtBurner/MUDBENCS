@@ -470,7 +470,7 @@ def bottle_depth_variables(bottle_file, down_df, up_df):
         debug('Depth range: ', depth_range)
         bottle_depth_downcast_df = down_df.loc[(down_df['DEPTH'] <=  max(depth_range)) & (down_df['DEPTH'] >=  min(depth_range))]
         bottle_depth_averages, bottle_depth_stds = bottle_depth_downcast_df.mean(), bottle_depth_downcast_df.std()
-        flag = 'Actual Values'
+        flag = 'Actual Downcast Values'
         #Check for NaNs, which are due to not enough distance between the beginning and end of a bottle firing. If
         #NaNs present, add distance in depth range:
         if bottle_depth_averages.isna().any():
@@ -478,13 +478,13 @@ def bottle_depth_variables(bottle_file, down_df, up_df):
             depth_range = [0.97*min(depth_range), 1.03*max(depth_range)]
             bottle_depth_downcast_df = down_df.loc[(down_df['DEPTH'] <=  max(depth_range)) & (down_df['DEPTH'] >=  min(depth_range))]
             bottle_depth_averages, bottle_depth_stds = bottle_depth_downcast_df.mean(), bottle_depth_downcast_df.std()
-            flag = 'Stretched Depth Range (3%)'
+            flag = 'Stretched Depth Range (3%), Downcast'
         #Do it a second time if 3% is not enough, but add a fixed distance to the range
         if bottle_depth_averages.isna().any():
             print('Nans still present in bottle ', bot_num, '. Using upcast data instead.')
             bottle_depth_downcast_df = up_df.loc[(up_df['DEPTH'] <=  max(depth_range)) & (up_df['DEPTH'] >=  min(depth_range))]
             bottle_depth_averages, bottle_depth_stds = bottle_depth_downcast_df.mean(), bottle_depth_downcast_df.std()
-            flag = 'Used upcast data due to depth differences from downcast data.'
+            flag = 'Used Upcast Data Due to Depth Differences from Downcast Data.'
         
         #Add bottle numbers to each series and compile a dataframe with the series:
         bottle_depth_averages['Bottle Number'] = bot_num
@@ -500,7 +500,7 @@ def bottle_depth_variables(bottle_file, down_df, up_df):
     return bot_avgs, bot_stds
 
 
-def load_CTD_data(CTD_num, variables = ['density', 'TEMP', 'PSAL'], plot_data=True, direction='both'):
+def load_CTD_data(CTD_num, variables = ['density', 'TEMP', 'PSAL'], plot_data=True, direction='both', up_cast_only = False):
     file_name, bottle_file = find_files(CTD_num)
     dat_nc = get_CNV_data(file_name)
     
@@ -512,7 +512,13 @@ def load_CTD_data(CTD_num, variables = ['density', 'TEMP', 'PSAL'], plot_data=Tr
     down_df, up_df = separate_up_down(dat_nc, find_bottom(dat_nc))
     
     #Get bottle averages
-    bot_avgs, bot_stds = bottle_depth_variables(bottle_file, down_df, up_df)
+    if up_cast_only == True:
+        bot_avgs, bot_stds = bottle_depth_variables_up_only(bottle_file, up_df)
+        print('Upcast data selected!')
+    else:
+        bot_avgs, bot_stds = bottle_depth_variables(bottle_file, down_df, up_df)
+
+    
 
     #Plot if desired
     if plot_data == True:
@@ -530,3 +536,38 @@ def find_files(CTD_num):
         bot_file_name = bl_file
 
     return file_name, bot_file_name
+
+def bottle_depth_variables_up_only(bottle_file, up_df):
+    bottle_depths = pd.read_csv(bottle_file, skiprows=2, header=None)
+    
+    debug('Shape of upcast dataframe: ', up_df.shape)
+    debug('Upcast dataframe index range: ', up_df.index[0], ' to ', up_df.index[-1])
+
+    bot_avgs = pd.DataFrame()
+    bot_stds = pd.DataFrame()
+
+    for ind, bot in bottle_depths.iterrows():
+        bot_num = bot[0]
+        debug('Bottle number: ', bot_num)
+        depth_range = [float(up_df['DEPTH'][up_df.index == bot[3]].values), float(up_df['DEPTH'][up_df.index == bot[4]].values)]
+        debug('Depth range: ', depth_range)
+        bottle_depth_downcast_df = up_df.loc[(up_df.index <=  bot[4]) & (up_df.index >=  bot[3])]
+        bottle_depth_averages, bottle_depth_stds = bottle_depth_downcast_df.mean(), bottle_depth_downcast_df.std()
+        flag = 'Actual Upcast Values'
+             
+        
+        #Add bottle numbers to each series and compile a dataframe with the series:
+        bottle_depth_averages['Bottle Number'] = bot_num
+        bottle_depth_stds['Bottle Number'] = bot_num
+        bottle_depth_averages['Depth avg flag'] = flag
+        bottle_depth_stds['Depth avg flag'] = flag
+        bot_avgs = bot_avgs.append(bottle_depth_averages, ignore_index=True)
+        bot_stds = bot_stds.append(bottle_depth_stds, ignore_index=True)
+        
+        debug('Loop ', ind, bottle_depth_averages, bottle_depth_stds)
+        debug('\n', '\n')
+
+    return bot_avgs, bot_stds
+
+
+
