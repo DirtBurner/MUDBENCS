@@ -522,7 +522,7 @@ def load_CTD_data(CTD_num, variables = ['density', 'TEMP', 'PSAL'], plot_data=Tr
 
     #Plot if desired
     if plot_data == True:
-        _, _, _, ax = plot_profile(dat_nc, variables, direction='down')
+        _, _, _, ax = plot_profile(dat_nc, variables, direction=direction)
     elif plot_data == False:
         ax = None
 
@@ -536,6 +536,7 @@ def find_files(CTD_num):
         bot_file_name = bl_file
 
     return file_name, bot_file_name
+
 
 def bottle_depth_variables_up_only(bottle_file, up_df):
     bottle_depths = pd.read_csv(bottle_file, skiprows=2, header=None)
