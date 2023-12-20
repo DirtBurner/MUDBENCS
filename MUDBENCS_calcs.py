@@ -6,6 +6,8 @@ from seabird.cnv import fCNV
 from mpl_toolkits.basemap import Basemap
 import geopandas as gpd
 import glob
+import cycler as cy
+import matplotlib as mpl
 
 print('(((((((((((((((( MUDBENCS Date Analysis and Visualization Tools ))))))))))))))))')
 
@@ -570,5 +572,184 @@ def bottle_depth_variables_up_only(bottle_file, up_df):
 
     return bot_avgs, bot_stds
 
+def MC_core_profiles(df, core='17MC', variables=['C%', 'N%', 'd13C', 'C:N (mass)', 'd15N', '%CaCO3'], inflator=0.2, col='peru'):
+    '''
+    Plots vertical profiles of multicore general geochem data. 
 
+        Inputs:
+            df (dataframe): single dataframe containing general geochemistry data as columns and individual
+                core depths as rows. Cores are identified in each row, so the dataframe can be sliced by core.
+            core (string): string specifying the core number, in format used during MUDBENCS cruise. Example:
+                '04MC' is the 4th sequential multicore taken. That is the only string needed. Function works
+                on one core at a time. 
+            variables (list of string): This list should consist of strings that correspond to the column 
+                headers of the dataframe input. If in doubt, please use the command `print(df.columns)` to 
+                get a list of columns that can be entered into this list. A "magic" column exists through
+                logic in this call; if a user enters `%CaCO3` into the list, the function will subtract the
+                %C of the carbon run (acid treated) from the %C of the nitrogen run (not acid treated) to 
+                provide a downcore plot of an estimate of the amount of carbonate mineral that was removed.
+            inflator (float, default 0.2): Number to control the axes labels indirectly. This number is a proportion of the 
+                x-axis range that is added to the full range so that the axes spread away from the min and max 
+                a bit. One can also use the axs output to do this manually for every subplot, but I have found 
+                this works well. Change to 0 to suppress this control.
+            col (string, default 'peru'): Color of points in the plot. Please take care to use a pyplot color
+                string, others will generate a line property error.
+
+        Outputs:
+            ax (pyplot axis object): axis object to do small modifications to the plots.
+    '''
+    if type(variables) is list:
+        variables = variables
+    else:
+        variables = [variables] #Protects against single variable entry rendering the loop inoperable.
+
+    #Create axes in the figure
+    _, axs = plt.subplots(1, len(variables))
+    df = df.sort_values(by='Top Depth')
+
+    for j, variable in enumerate(variables):
+        center_depth = (df[df['Core']==core]['Top Depth']+df[df['Core']==core]['Bottom Depth'])/2
+        axs[j].plot(
+            df[df['Core']==core][variable],
+            -center_depth,
+            marker='o',
+            color=col,
+            mec='k',
+            linestyle='--'
+        ) 
+        #Define universal x-limits so that all plots are on the same axes
+        infl = inflator  #inflates x-axis by a proportion. 0 means no inflation.
+        xlimits = [min(df[variable])-infl*abs(min(df[variable])), max(df[variable])+infl*abs(max(df[variable]))]
+        debug(variable, 'x-axis limits = ', xlimits)
+        axs[j].set_xlim(xlimits)
+        if variable == 'd15N':
+            varname = r'$\delta^{15}$N'
+        elif variable == 'd13C':
+            varname = r'$\delta^{13}$C'
+        elif variable == '%CaCO3':
+            varname = r'% CaCO$_3$'
+        else:
+            varname = variable
+        axs[j].set(xlabel=varname)
+        if j == 0:
+            axs[j].set(ylabel='Depth (cm)')
+        else:
+            axs[j].set(yticks=[])
+
+    return axs
+
+def load_organic_geochem_MC():
+    '''
+    Loads multicore organic geochemistry data from a fixed spreadsheet that contains all results from all cores
+    including repeated analyses.
+
+    '''
+
+    carbon_df = pd.read_excel('Mudbencs MC Carbon compiled.xlsx', 'Sheet1', skiprows=20)
+    debug(carbon_df.columns)
+    C_df = carbon_df[['Identifier 1', 'd15N (‰, AT-Air)', 'd13C (‰, VPDB)', 'N%', 'C%', 'C:N (mass)', 'N (µmol)', 'C (µmol)']]
+    debug(C_df.shape)
+    nitrogen_df = pd.read_excel('Mudbencs MC Nitrogen compiled.xlsx', 'Sheet1', skiprows=20)
+    N_df = nitrogen_df[['Identifier 1', 'd15N (‰, AT-Air)', 'N%', 'C%', 'N (µmol)']]
+    debug(N_df.shape)
+    CN_df = N_df.merge(C_df, on='Identifier 1', how='outer', indicator=True, suffixes=('(N)', None))
+    debug(CN_df.shape)
+
+    #Rename the columns for ease of use. 
+    CN_df.rename(columns={
+        "Identifier 1": "Sample ID",
+        "d15N (‰, AT-Air)(N)": "d15N",
+        "N (µmol)(N)":"umols N (N)",
+        "d15N (‰, AT-Air)":"d15N (C)",
+        "d13C (‰, VPDB)":"d13C",
+        "N (µmol)":"umols N",
+        "C (µmol)":"umols C"
+    }, inplace=True)
+
+    #Separate the Sample ID column into useful core numbers, top depths, and bottom depths.
+    top_depth_list = []
+    bottom_depth_list = []
+    core_list = []
+    for n, row in CN_df.iterrows():
+        core = row['Sample ID'].split('-')[2]
+        top = float(row['Sample ID'].split(' ')[1].split('c')[0].split('-')[0])
+        bottom = float(row['Sample ID'].split(' ')[1].split('c')[0].split('-')[1])
+        top_depth_list.append(top)
+        bottom_depth_list.append(bottom)
+        core_list.append(core)
+
+    CN_df['Top Depth'] = pd.Series(top_depth_list)
+    CN_df['Bottom Depth'] = pd.Series(bottom_depth_list)
+    CN_df['Core'] = pd.Series(core_list)
+    #Add %CaCO3 column from calculation involving the C% columns from both of the merged dataframes:
+    CN_df['%CaCO3'] = CN_df['C%(N)'] - CN_df['C%']
+    #Correct the C% column to reflect the missing mass of carbonate minerals from the carbon runs:
+    CN_df['C%'] = CN_df['C%']*(1-CN_df['%CaCO3'])
+
+    debug(CN_df.head())
+
+    print(
+        'Dataframe formed from merger of two spreadsheets. Pandas merge function creates a column "_merge"\n',
+        'that tells you left, right, or both. This is an important column to check. The "left" dataframe\n',
+        'contains carbon run analyses, and the right one contains nitrogen run analyses. Verify that \n',
+        'any rows with either left or right in the _merge column are unique to either the C or N dataframe.'
+    )
+
+    return CN_df
+
+def plot_MCs(og_df, corelist, variable, cmap='plasma', shape_list=['o', '^', 's', 'd']):
+    '''
+    Plots the vertical profiles of a variable in several cores which are supplied by a core list
+
+        Inputs:
+            og_df (dataframe): The dataframe produced by the function load_organic_geochem_MC
+            corelist (list of strings): A list of multicores in format XXMC were XX is the two-digit 
+                sequential core number. The routine works with slices of og_df, so entering a non-
+                sensical core number will result in an entry in the legend with no data in the plot
+                but it will not throw an error. 
+            variable (string): This is a string that is identical to one of the columns in og_df. The 
+                variable must be an exact match, so print out the columns of og_df (`print(og_df.columns)`)
+                prior to using this function, or if you get key errors.
+            cmap (string): Corresponds to colormap from matplotlib. Accessed through matplotlib.colors.get_cmap,
+                thus is must be a matplotlib recognized colormap. Default is plasma.
+            shape_list (list of strings): Provides a list of shapes to cycler. Cycler recognizes matplotlib 
+                shapes, so shapes must be of that ilk. This cycles through the shapes with different colors
+                so that individual cores will have a unique shape and color instance. Default is circle,
+                triangle (upward), square, diamond. You may want to add more, have less, or simply change
+                shapes for graph readability. 
+        
+        Outputs:
+            ax (matplotlib axis handle): the axis handle so that you can make small modifications to the axes
+    '''
+
+    #Set shape and color list for cycling through the corelist:
+    norm = mpl.colors.Normalize(vmin=0, vmax=len(corelist))
+    cmap = mpl.cm.get_cmap(cmap)
+    color_list = [cmap(norm(ind)) for (ind, core) in enumerate(corelist)]
+
+
+    fig, ax = plt.subplots(nrows=1, ncols=1)
+    custom_cycler_shape = (cy.cycler(marker=shape_list))
+    ax.set_prop_cycle(custom_cycler_shape)
+
+    #Set x-variable:
+
+
+    #Set variable label:
+    if variable == 'd15N':
+        varname = r'$\delta^{15}$N'
+    elif variable == 'd13C':
+        varname = r'$\delta^{13}$C'
+    elif variable == '%CaCO3':
+        varname = r'% CaCO$_3$'
+    else:
+        varname = variable
+
+    for j, core in enumerate(corelist):
+        ax.plot(og_df[og_df['Core']==core][variable], -og_df[og_df['Core']==core]['Top Depth'], linestyle='', mec='k', color=color_list[j], markersize=10)
+
+    ax.set(xlabel=varname, ylabel='Depth (cm)')
+    ax.legend(corelist)
+
+    return ax
 
