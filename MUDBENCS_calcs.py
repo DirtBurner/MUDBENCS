@@ -158,7 +158,7 @@ def plot_profile(dat_nc, variable, direction='down'):
         v.append(temp)
         debug('Building out the variables from variable. Adding:', v)
 
-    #Creat axes for each variable in the profile.
+    #Create axes for each variable in the profile.
     _, ax = plt.subplots(nrows=1, ncols=len(v))
 
     for z, axis in enumerate(ax.flatten()):
@@ -363,26 +363,29 @@ def MUDBENCS_map(data_df, variable, colormap='plasma', label_countries=True, add
         print('Variable not recognized. Plotting salinity by default. Try again by listing all column names.')
 
     
-    fig = plt.figure()
-    m = Basemap(projection='lcc', resolution='h', lat_0=2.5, lon_0=-51, width=0.9e6, height=0.9e6)
-    m.shadedrelief()
-    m.drawcoastlines(color='white', linewidth=1)
-    m.drawcountries(color='lightgray', linewidth=1)
-    m.drawparallels(np.arange(-80., 81., 5.), labels=[True,False,False,True])
-    m.drawmeridians(np.arange(-180., 181., 5.), labels=[True,False,False,True])
-    x, y = m(data_df['Lon Dec. Deg.'], data_df['Lat Dec. Deg.'])
-    m.scatter(x, y, c=data_df[variable], s=25, cmap=colormap)
-    plt.colorbar( label=variable.strip())
+    map_ax = Basemap(projection='lcc', resolution='h', lat_0=2.5, lon_0=-51, width=0.9e6, height=0.9e6)
+    map_ax.shadedrelief()
+    map_ax.drawcoastlines(color='white', linewidth=1)
+    map_ax.drawcountries(color='lightgray', linewidth=1)
+    map_ax.drawparallels(np.arange(-80., 81., 5.), labels=[True,False,False,True])
+    map_ax.drawmeridians(np.arange(-180., 181., 5.), labels=[True,False,False,True])
+    x, y = map_ax(data_df['Lon Dec. Deg.'], data_df['Lat Dec. Deg.'])
+    m = map_ax.scatter(x, y, c=data_df[variable], s=25, cmap=colormap)
+    #if ax:
+    #    plt.colorbar(label=variable.strip(), ax=ax, mappable=m)
+    #else:
+    #    plt.colorbar(label=variable.strip())
+    plt.colorbar(label=variable.strip())
     #Add optional map features called in kwargs:
     if label_countries == True:
-        add_country_names(m)
+        add_country_names(map_ax)
     if add_stations == True:
-        add_stations_list(m, stationslist)
+        add_stations_list(map_ax, stationslist)
     if add_front == True:
-        add_front_site(m)
+        add_front_site(map_ax)
  
 
-    return m
+    return map_ax
 
 def add_country_names(m):
     '''
@@ -472,6 +475,7 @@ def bottle_depth_variables(bottle_file, down_df, up_df):
         debug('Depth range: ', depth_range)
         bottle_depth_downcast_df = down_df.loc[(down_df['DEPTH'] <=  max(depth_range)) & (down_df['DEPTH'] >=  min(depth_range))]
         bottle_depth_averages, bottle_depth_stds = bottle_depth_downcast_df.mean(), bottle_depth_downcast_df.std()
+        debug('Bottle Depth averages and standard deviations: ', bottle_depth_averages, bottle_depth_stds)
         flag = 'Actual Downcast Values'
         #Check for NaNs, which are due to not enough distance between the beginning and end of a bottle firing. If
         #NaNs present, add distance in depth range:
@@ -480,12 +484,14 @@ def bottle_depth_variables(bottle_file, down_df, up_df):
             depth_range = [0.97*min(depth_range), 1.03*max(depth_range)]
             bottle_depth_downcast_df = down_df.loc[(down_df['DEPTH'] <=  max(depth_range)) & (down_df['DEPTH'] >=  min(depth_range))]
             bottle_depth_averages, bottle_depth_stds = bottle_depth_downcast_df.mean(), bottle_depth_downcast_df.std()
+            debug('Bottle Depth averages and standard deviations: ', bottle_depth_averages, bottle_depth_stds)
             flag = 'Stretched Depth Range (3%), Downcast'
         #Do it a second time if 3% is not enough, but add a fixed distance to the range
         if bottle_depth_averages.isna().any():
             print('Nans still present in bottle ', bot_num, '. Using upcast data instead.')
-            bottle_depth_downcast_df = up_df.loc[(up_df['DEPTH'] <=  max(depth_range)) & (up_df['DEPTH'] >=  min(depth_range))]
+            bottle_depth_downcast_df = down_df.loc[(down_df['DEPTH'] <=  max(depth_range)) & (down_df['DEPTH'] >=  min(depth_range))]
             bottle_depth_averages, bottle_depth_stds = bottle_depth_downcast_df.mean(), bottle_depth_downcast_df.std()
+            debug('Bottle Depth averages and standard deviations: ', bottle_depth_averages, bottle_depth_stds)
             flag = 'Used Upcast Data Due to Depth Differences from Downcast Data.'
         
         #Add bottle numbers to each series and compile a dataframe with the series:
@@ -493,8 +499,8 @@ def bottle_depth_variables(bottle_file, down_df, up_df):
         bottle_depth_stds['Bottle Number'] = bot_num
         bottle_depth_averages['Depth avg flag'] = flag
         bottle_depth_stds['Depth avg flag'] = flag
-        bot_avgs = bot_avgs.append(bottle_depth_averages, ignore_index=True)
-        bot_stds = bot_stds.append(bottle_depth_stds, ignore_index=True)
+        bot_avgs = pd.concat([bot_avgs, bottle_depth_averages], ignore_index=True)
+        bot_stds = pd.concat([bot_stds, bottle_depth_stds], ignore_index=True)
         
         debug('Loop ', ind, bottle_depth_averages, bottle_depth_stds)
         debug('\n', '\n')
@@ -564,8 +570,8 @@ def bottle_depth_variables_up_only(bottle_file, up_df):
         bottle_depth_stds['Bottle Number'] = bot_num
         bottle_depth_averages['Depth avg flag'] = flag
         bottle_depth_stds['Depth avg flag'] = flag
-        bot_avgs = bot_avgs.append(bottle_depth_averages, ignore_index=True)
-        bot_stds = bot_stds.append(bottle_depth_stds, ignore_index=True)
+        bot_avgs = pd.concat([bot_avgs, bottle_depth_averages], ignore_index=True)
+        bot_stds = pd.concat([bot_stds, bottle_depth_stds], ignore_index=True)
         
         debug('Loop ', ind, bottle_depth_averages, bottle_depth_stds)
         debug('\n', '\n')
@@ -753,3 +759,131 @@ def plot_MCs(og_df, corelist, variable, cmap='plasma', shape_list=['o', '^', 's'
 
     return ax
 
+
+def nuts_coords(nuts_df ):
+    '''
+    Opens the coordinates file, then searches the nuts_df for station numbers. Matches station numbers and 
+    adds coordinates to the dataframe with columns names that allow compatability with MUDBANCS_map function
+    
+    '''
+
+    stations = pd.read_csv('MUDBENCS_Stations.csv')
+    debug(stations.columns)
+
+    stations_split = [station.split(' ')[1] if ('MUDBENCS' in station) else station.split('-')[1][0:2] for station in nuts_df['Station']]
+    station_type = ['Fish Surface' if ('MUDBENCS' in station) else 'Other' for station in nuts_df['Station']]
+    stations_corr = ['0'+station if len(station)<2 else station for station in stations_split]
+    debug(stations_corr)
+
+    nuts_df['Station Number'] = stations_corr
+    nuts_df['Station Type'] = station_type
+    nuts_df['Lat Dec. Deg.'] = np.nan
+    nuts_df['Lon Dec. Deg.'] = np.nan
+    for n, row in nuts_df.iterrows():
+        mask = [True if (row['Station Number'] in number) else False for number in stations['Station Number']]
+        #print(stations.loc[mask])
+        nuts_df['Lat Dec. Deg.'][n] = stations['Lat'].loc[mask]
+        nuts_df['Lon Dec. Deg.'][n] = stations['Lon'].loc[mask]
+
+    return nuts_df
+
+def MC_tops_coords(MC_tops_df):
+    '''
+    Opens the coordinates file, then searches the nuts_df for station numbers. Matches station numbers and 
+    adds coordinates to the dataframe with columns names that allow compatability with MUDBANCS_map function
+        
+    '''
+
+    stations = pd.read_csv('MUDBENCS_Stations.csv')
+    debug(stations.columns)
+
+    stations_split = [station.split(' ')[0] for station in MC_tops_df['Station']]
+    stations_split = [station.split('N')[1] for station in stations_split]
+    stations_corr = ['0'+station if len(station)<2 else station for station in stations_split]
+    print(stations_corr)
+
+    MC_tops_df['Station Number'] = stations_corr
+
+    MC_tops_df['Lat Dec. Deg.'] = np.nan
+    MC_tops_df['Lon Dec. Deg.'] = np.nan
+    for n, row in MC_tops_df.iterrows():
+        mask = [True if (row['Station Number'] in number) else False for number in stations['Station Number']]
+        #print(stations.loc[mask])
+        MC_tops_df['Lat Dec. Deg.'][n] = stations['Lat'].loc[mask]
+        MC_tops_df['Lon Dec. Deg.'][n] = stations['Lon'].loc[mask]
+
+    return MC_tops_df
+
+def load_nuts():
+    '''
+    Function to load nutrients data, parsing the data from the Buck Lab (University of South Florida) into 
+    several DataFrames for use in plotting. This routine also parses the station labeling routine from 
+    Calyn Crawford and Brenna Boehman which deviated from the perscripted labeling plan in order to apply
+    coordinates to the data. Coordinates are added in another function.
+
+    *The file that is hardwired here was updated with nutrient data from 2 reruns of the data that was sent from
+    Kristen Buck to Brad Rosenheim on April 17, 2024. Original file contained cells that had '<LOD' if the sample
+    was below detection limit; these data just contained 0.00 as a value. 
+    
+    '''
+
+
+    debug('Accessing nutrients file MUDBENCS_2023_Nuts_Results V2.xlsx...')
+    nuts_df = pd.read_excel('MUDBENCS_2023_Nuts_Results v2.xlsx', skiprows=4, usecols='A:E', nrows=46, names=['Station', 'P', 'N+N', 'Si Acid', 'Nitrite'], header=None)
+    nuts_df = nuts_df.replace([0.00], [np.nan]) #Not sure why this has to be a list, but it doesn't work if not set up as a list.   
+
+    QC_df = pd.read_excel('MUDBENCS_2023_Nuts_Results v2.xlsx', skiprows=4, usecols='H:L', nrows=11, names=['Standard', 'P', 'N+N', 'Si Acid', 'Nitrite'])
+    reference_df = pd.read_excel('MUDBENCS_2023_Nuts_Results v2.xlsx', skiprows=4, usecols='O:S', nrows=7, names=['Standard', 'P', 'N+N', 'Si Acid', 'Nitrite'])
+    RMNS_df = pd.read_excel('MUDBENCS_2023_Nuts_Results v2.xlsx', skiprows=4, usecols='V:Z', nrows=21, names=['Standard', 'P', 'N+N', 'Si Acid', 'Nitrite'])
+    LOD_df = pd.read_excel('MUDBENCS_2023_Nuts_Results v2.xlsx', skiprows=17, usecols='P:S', nrows=1, names=['P', 'N+N', 'Si Acid', 'Nitrite'])
+    MC_coretop_df = pd.read_excel('MUDBENCS_2023_Nuts_Results v2.xlsx', skiprows=53, usecols='A:E', nrows=12, names=['Station', 'P', 'N+N', 'Si Acid', 'Nitrite']).dropna(axis=1)
+    
+    print('Values for all returned DataFrames in micromoles per liter!')
+
+    nuts_df = nuts_coords(nuts_df)
+    MC_tops_df = MC_tops_coords(MC_coretop_df)
+
+    surface_nuts = nuts_df[nuts_df['Station Type']=='Fish Surface'] 
+    
+
+    return nuts_df, surface_nuts, MC_coretop_df, QC_df, reference_df, RMNS_df, LOD_df
+
+def load_Subramaniam_nuts():
+    '''
+    Loads spreadsheet from Subramaniam et al., 2007 which contains various nutrients and other measurements
+    first loads column names that provide compatibility with the MUDBENCS_map function, and then loads
+    data, ignoring the statistics from the three different groups of station types in the spreadsheet.
+    
+    '''
+    col_names = [
+        'Date',
+        'Station', 
+        'Station_Type', 
+        'Lat Dec. Deg.',
+        'Lon Dec. Deg.', 
+        'Temperature (C)',
+        'Salinity', 
+        'Fe_d (nM)',
+        'SRP (nM)',
+        'Si dissolved (uM)',
+        'Si_bio_surf (umol/L)',
+        'Nitrate (uM)',
+        'DIC (umol/kg), riv corr',
+        'Biological drawdown (umol/kg)',
+        'Wind speed (m/s)',
+        '1 percent depth',
+        'MLD (m)',
+        'Int Biomass (trichomes/m2 x 10^6)',
+        'Int Biomass (richelia/m2 x 10^6)',
+        'HPLC Phyto Chl (mg/m2)',
+        'Total C fixation (mmolC/m2/day)',
+        'Tricho N2 fix (umolN/m2/day)',
+        'Hemi N2 fix (umolN/m2/day)', 
+        'Total N2 fix (umolN/m2/day)'
+    ]
+
+    #Read Subramaniam et al 2007 excel sheet, dropping any column with nans to get rid of the columns with statistics.
+    df_1 = pd.read_excel('Subramaniam et al 2007 PNAS Data.xlsx', skiprows=9, usecols='A:X', names=col_names, engine='openpyxl')
+    df_1 = df_1.loc[~df_1['Station'].isna()]
+
+    return df_1
